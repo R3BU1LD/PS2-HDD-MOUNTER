@@ -1,3 +1,4 @@
+
 <img width="1408" height="768" alt="image_e316373" src="https://github.com/user-attachments/assets/b8ab82db-0938-4c88-9eab-eef4361667d7" />
 
 > ⚠️ **ADVANCED / POWER USER UTILITY — USE WITH CAUTION**  
@@ -7,8 +8,8 @@
 > ⚠️**Never delete or overwrite core bootloader files inside __boot or __system, as this will prevent FreeHDBoot from booting your console.**
 ---
 
-# PS2 HDD MOUNTER // Safe USB PFS Partition & File Explorer
 
+<img width="1610" height="77" alt="PS2 HDD MOUNTER Safe USB PFS Partition and File Explorer" src="https://github.com/user-attachments/assets/d1abd3c2-51cf-429b-815e-f13a3eaae3d9" />
 
 
 A modern, sci-fi themed C# WPF utility for managing partitions and transferring files on **PlayStation 2 internal hard drives (APA / PFS)** over USB. Built to pair seamlessly with **PS2 HDD CREATOR**, it features a **dual-layer safety lock** that protects both your internal PC drives and critical FreeHDBoot system partitions.
