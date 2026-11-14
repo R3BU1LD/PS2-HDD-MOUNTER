@@ -1,5 +1,5 @@
 <img width="1408" height="768" alt="image_e316373" src="https://github.com/user-attachments/assets/b8ab82db-0938-4c88-9eab-eef4361667d7" />
----
+
 > ⚠️ **ADVANCED / POWER USER UTILITY — USE WITH CAUTION**  
 > **PS2 HDD MOUNTER** provides direct low-level read/write access to PlayStation 2 APA partitions and PFS filesystems. While built-in safety locks protect your internal Windows drives and core FreeHDBoot system partitions (`__mbr`, `__boot`, `__sysconf`, etc.), modifying partitions or deleting files on a console hard drive requires basic knowledge of the PS2 filesystem structure. **Always back up important saves and configurations before making changes. Use at your own risk.**
 
