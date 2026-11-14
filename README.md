@@ -1,4 +1,5 @@
-<img width="1408" height="768" alt="image_4e6022c0" src="https://github.com/user-attachments/assets/e786daae-5d00-47d5-bcb6-94cceacbb8ec" />
+<img width="1408" height="768" alt="image_e316373" src="https://github.com/user-attachments/assets/b8ab82db-0938-4c88-9eab-eef4361667d7" />
+
 # PS2 HDD MOUNTER // Safe USB PFS Partition & File Explorer
 
 ![Platform](https://shields.io)
