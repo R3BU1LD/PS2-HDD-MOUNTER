@@ -2,9 +2,9 @@
 
 # PS2 HDD MOUNTER // Safe USB PFS Partition & File Explorer
 
-![Platform](https://shields.io)
-![Framework](https://shields.io)
-![Target](https://shields.io)
+> ⚠️ **ADVANCED / POWER USER UTILITY — USE WITH CAUTION**  
+> **PS2 HDD MOUNTER** provides direct low-level read/write access to PlayStation 2 APA partitions and PFS filesystems. While built-in safety locks protect your internal Windows drives and core FreeHDBoot system partitions (`__mbr`, `__boot`, `__sysconf`, etc.), modifying partitions or deleting files on a console hard drive requires basic knowledge of the PS2 filesystem structure. **Always back up important saves and configurations before making changes. Use at your own risk.**
+
 
 A modern, sci-fi themed C# WPF utility for managing partitions and transferring files on **PlayStation 2 internal hard drives (APA / PFS)** over USB. Built to pair seamlessly with **PS2 HDD CREATOR**, it features a **dual-layer safety lock** that protects both your internal PC drives and critical FreeHDBoot system partitions.
 
