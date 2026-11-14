@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:PS2HDDMOUNTER"
         mc:Ignorable="d"
-        Title="PS2 HDD MOUNTER // PFS EXPLORER" Height="680" Width="840"
+        Title="PS2 HDD MOUNTER // PFS EXPLORER" Height="800" Width="950"
         Background="Transparent" AllowsTransparency="True" WindowStyle="None"
         WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip">
 
@@ -21,7 +21,29 @@
             <Setter Property="Height" Value="36"/>
             <Setter Property="Padding" Value="14,0"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BtnBorder" 
+                                Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BtnBorder" Property="Background" Value="#1E315C"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
+        
         <!-- Custom Sci-Fi ComboBox (2026 HUD Theme) -->
         <Style x:Key="SciFiComboBox" TargetType="ComboBox">
             <Setter Property="Foreground" Value="#00F0FF"/>
@@ -165,10 +187,41 @@
                     </StackPanel>
 
                     <WrapPanel Orientation="Horizontal">
-                        <Button x:Name="BtnListPartitions" Content="SCAN PARTITIONS" Style="{StaticResource SciFiButton}" BorderBrush="#CE00FF" Foreground="#CE00FF" Margin="0,0,8,0" Click="BtnListPartitions_Click"/>
-                        <Button x:Name="BtnListFiles" Content="LIST FILES (LS)" Style="{StaticResource SciFiButton}" Margin="0,0,8,0" Click="BtnListFiles_Click"/>
-                        <Button x:Name="BtnUploadFile" Content="UPLOAD FILE (PUT)" Style="{StaticResource SciFiButton}" BorderBrush="#00FF66" Foreground="#00FF66" Margin="0,0,8,0" Click="BtnUploadFile_Click"/>
-                        <Button x:Name="BtnDownloadFile" Content="EXPORT FILE (GET)" Style="{StaticResource SciFiButton}" BorderBrush="#FF9900" Foreground="#FF9900" Click="BtnDownloadFile_Click"/>
+                        <Button x:Name="BtnListPartitions" Content="SCAN PARTITIONS" Style="{StaticResource SciFiButton}" BorderBrush="#CE00FF" Foreground="#CE00FF" Margin="0,0,8,6" Click="BtnListPartitions_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#FFDB07FF" ShadowDepth="0" BlurRadius="16" Opacity="0.7"/>
+                            </Button.Effect>
+                        </Button>
+
+                        <Button x:Name="BtnListFiles" Content="LIST FILES (LS)" Style="{StaticResource SciFiButton}" Margin="0,0,8,6" Click="BtnListFiles_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#00F0FF" ShadowDepth="0" BlurRadius="16" Opacity="0.7"/>
+                            </Button.Effect>
+                        </Button>
+
+                        <Button x:Name="BtnUploadFile" Content="UPLOAD FILE (PUT)" Style="{StaticResource SciFiButton}" BorderBrush="#00FF66" Foreground="#00FF66" Margin="0,0,8,6" Click="BtnUploadFile_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#00FF66" ShadowDepth="0" BlurRadius="16" Opacity="0.7"/>
+                            </Button.Effect>
+                        </Button>
+
+                        <Button x:Name="BtnDownloadFile" Content="EXPORT FILE (GET)" Style="{StaticResource SciFiButton}" BorderBrush="#FF9900" Foreground="#FF9900" Margin="0,0,8,6" Click="BtnDownloadFile_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#FF9900" ShadowDepth="0" BlurRadius="16" Opacity="0.7"/>
+                            </Button.Effect>
+                        </Button>
+
+                        <Button x:Name="BtnCreatePartition" Content="CREATE PARTITION" Style="{StaticResource SciFiButton}" BorderBrush="#FF3355" Foreground="#FF3355" Margin="0,0,8,6" Click="BtnCreatePartition_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#FF3355" ShadowDepth="0" BlurRadius="16" Opacity="0.7"/>
+                            </Button.Effect>
+                        </Button>
+
+                        <Button x:Name="BtnRemovePartition" Content="DELETE PARTITION" Style="{StaticResource SciFiButton}" BorderBrush="#FF3355" Foreground="#FF3355" Margin="0,0,0,6" Click="BtnRemovePartition_Click">
+                            <Button.Effect>
+                                <DropShadowEffect Color="#FF3355" ShadowDepth="0" BlurRadius="16" Opacity="0.7"/>
+                            </Button.Effect>
+                        </Button>
                     </WrapPanel>
                 </StackPanel>
             </Border>

@@ -75,27 +75,22 @@ namespace PS2HDDMOUNTER
             return "+OPL";
         }
 
-        // 2. Asynchrone pfsshell uitvoer zonder bevriezend scherm
         private Task<string> ExecutePfsCommandAsync(string driveNumber, string scriptContent, int timeoutMs = 60000)
         {
             return Task.Run(() =>
             {
                 if (!File.Exists(pfsShellPath))
                 {
-                    return $"FOUT: pfsshell.exe is niet gevonden in:\n{pfsShellPath}\nPlaats pfsshell.exe in de programmamap.";
+                    return $"FOUT: pfsshell.exe is niet gevonden in:\n{pfsShellPath}";
                 }
-
-                string scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"pfs_script_{Guid.NewGuid():N}.txt");
-                string fullScript = $"device hdd{driveNumber}:\n{scriptContent}\nexit\n";
-                File.WriteAllText(scriptPath, fullScript);
 
                 try
                 {
                     ProcessStartInfo startInfo = new ProcessStartInfo
                     {
                         FileName = pfsShellPath,
-                        Arguments = $"\"{scriptPath}\"",
                         WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
+                        RedirectStandardInput = true,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
@@ -105,29 +100,63 @@ namespace PS2HDDMOUNTER
                     using Process? process = Process.Start(startInfo);
                     if (process == null) return "FOUT: Kon pfsshell.exe niet starten.";
 
+                    var outputTask = process.StandardOutput.ReadToEndAsync();
+                    var errorTask = process.StandardError.ReadToEndAsync();
+
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.StandardInput.WriteLine($@"device \\.\PHYSICALDRIVE{driveNumber}");
+                            process.StandardInput.Flush();
+                            System.Threading.Thread.Sleep(200);
+                        }
+
+                        foreach (var line in scriptContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            if (process.HasExited) break;
+                            process.StandardInput.WriteLine(line);
+                            process.StandardInput.Flush();
+                            System.Threading.Thread.Sleep(150);
+                        }
+
+                        if (!process.HasExited)
+                        {
+                            process.StandardInput.WriteLine("exit");
+                            process.StandardInput.Flush();
+                        }
+                        process.StandardInput.Close();
+                    }
+                    catch (IOException)
+                    {
+                        // Negeer broken pipe als pfsshell zelf al is afgesloten; we lezen hieronder zijn melding uit
+                    }
+
                     if (process.WaitForExit(timeoutMs))
                     {
-                        string output = process.StandardOutput.ReadToEnd();
-                        string error = process.StandardError.ReadToEnd();
-                        if (!string.IsNullOrEmpty(error)) return $"Melding:\n{error}\n\nOutput:\n{output}";
-                        return output;
+                        string output = outputTask.Result.Trim();
+                        string error = errorTask.Result.Trim();
+
+                        string combined = $"{output}\n{error}".Trim();
+                        return string.IsNullOrWhiteSpace(combined)
+                            ? "[Geen uitvoer ontvangen — start de applicatie als Administrator!]"
+                            : combined;
                     }
                     else
                     {
                         process.Kill();
-                        return $"FOUT: Time-out na {timeoutMs / 1000} seconden. Controleer of je de app als Administrator draait.";
+                        return $"FOUT: Time-out na {timeoutMs / 1000} seconden.";
                     }
                 }
                 catch (Exception ex)
                 {
                     return $"Systeemfout: {ex.Message}";
                 }
-                finally
-                {
-                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
-                }
             });
         }
+
+
+
 
         private void SetBusyState(bool isBusy, string statusMessage)
         {
@@ -170,7 +199,7 @@ namespace PS2HDDMOUNTER
             string partition = GetTargetPartition();
             SetBusyState(true, $"[BUSY] Bestanden ophalen uit '{partition}'...");
 
-            string script = $"mount {partition}\nls\nunmount";
+            string script = $"mount {partition}\nls\numount";
             string result = await ExecutePfsCommandAsync(selectedDrive.Number, script);
 
             Log($"=== BESTANDEN IN {partition} ===\n{result}");
@@ -205,7 +234,7 @@ namespace PS2HDDMOUNTER
                     await Task.Run(() => File.Copy(sourceFile, tempTarget, true));
 
                     // Timeout van 5 minuten (300.000 ms) zodat ook grote 700MB .VCD PS1-games rustig overgezet worden
-                    string script = $"mount {partition}\nput \"{fileName}\"\nunmount";
+                    string script = $"mount {partition}\nput \"{fileName}\"\numount";
                     string result = await ExecutePfsCommandAsync(selectedDrive.Number, script, 300000);
 
                     Log($"=== UPLOAD NAAR {partition}: {fileName} ===\n{result}");
@@ -246,7 +275,7 @@ namespace PS2HDDMOUNTER
                 string tempDownloaded = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, remoteFileName);
                 try
                 {
-                    string script = $"mount {partition}\nget \"{remoteFileName}\"\nunmount";
+                    string script = $"mount {partition}\nget \"{remoteFileName}\"\numount";
                     string result = await ExecutePfsCommandAsync(selectedDrive.Number, script, 300000);
                     if (File.Exists(tempDownloaded))
                     {
@@ -266,6 +295,75 @@ namespace PS2HDDMOUNTER
                     Log($"✖ Export fout: {ex.Message}");
                     SetBusyState(false, "[ERROR] Export mislukt.");
                 }
+            }
+        }
+        private async void BtnCreatePartition_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbDrives.SelectedItem is not DriveInfoItem selectedDrive) return;
+            string partition = GetTargetPartition();
+
+            var confirm = MessageBox.Show(
+                $"Wil je partitie '{partition}' (2048 MB) aanmaken en formatteren op USB #{selectedDrive.Number}?",
+                "Nieuwe PS2 Partitie Aanmaken", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            BtnCreatePartition.IsEnabled = false;
+            SetBusyState(true, $"[BUSY] Partitie '{partition}' aanmaken...");
+
+            try
+            {
+                string script = $"mkpart {partition} 2048M\nmkfs {partition}";
+                string result = await ExecutePfsCommandAsync(selectedDrive.Number, script);
+
+                Log($"=== NIEUWE PARTITIE: {partition} ===\n{result}");
+                SetBusyState(false, $"[OK] Partitie '{partition}' aangemaakt!");
+            }
+            finally
+            {
+                BtnCreatePartition.IsEnabled = true;
+            }
+        }
+        private async void BtnRemovePartition_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbDrives.SelectedItem is not DriveInfoItem selectedDrive)
+            {
+                MessageBox.Show("Selecteer eerst een USB PS2 HDD.", "Geen schijf", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string partition = GetTargetPartition();
+
+            // Veiligheidsslot: blokkeer cruciale PS2/FreeHDBoot systeempartities
+            string[] protectedPartitions = { "__mbr", "__net", "__system", "__sysconf", "__common", "__boot", "__empty" };
+            if (Array.Exists(protectedPartitions, p => p.Equals(partition, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show(
+                    $"VEILIGHEIDSBLOKKADE: De systeempartitie '{partition}' mag niet worden verwijderd omdat FreeHDBoot en het PS2-systeem hiervan afhankelijk zijn!",
+                    "Beschermde Systeempartitie", MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"WAARSCHUWING: Weet je zeker dat je partitie '{partition}' en ALLE bestanden daarin definitief wilt verwijderen van USB #{selectedDrive.Number}?",
+                "PS2 Partitie Verwijderen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            BtnRemovePartition.IsEnabled = false;
+            SetBusyState(true, $"[BUSY] Partitie '{partition}' verwijderen...");
+
+            try
+            {
+                string script = $"rmpart {partition}";
+                string result = await ExecutePfsCommandAsync(selectedDrive.Number, script);
+
+                Log($"=== PARTITIE VERWIJDERD: {partition} ===\n{result}");
+                SetBusyState(false, $"[OK] Partitie '{partition}' verwijderd!");
+            }
+            finally
+            {
+                BtnRemovePartition.IsEnabled = true;
             }
         }
         private void BtnClearLog_Click(object sender, RoutedEventArgs e) => txtLog.Clear();
