@@ -2,16 +2,18 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Management; // NuGet pakket installeren indien nodig
+using System.Management;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Win32;
 
 namespace PS2HDDMOUNTER
 {
     public partial class MainWindow : Window
     {
-        // Pas dit pad aan naar de plek waar jouw pfsshell.exe staat
-        private string pfsShellPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pfsshell.exe");
+        private readonly string pfsShellPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pfsshell.exe");
 
         public MainWindow()
         {
@@ -19,164 +21,272 @@ namespace PS2HDDMOUNTER
             LoadPhysicalDrives();
         }
 
-        // 1. Haal automatisch alle fysieke schijven op uit Windows
+        // 1. Alleen USB-schijven ophalen (100% bescherming van interne Windows SATA/NVMe schijven)
         private void LoadPhysicalDrives()
         {
             List<DriveInfoItem> driveList = new List<DriveInfoItem>();
             try
             {
-                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive");
+                var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive WHERE InterfaceType='USB'");
                 foreach (ManagementObject t in searcher.Get())
                 {
-                    string caption = t["Caption"]?.ToString() ?? "Onbekende schijf";
-                    string deviceId = t["DeviceID"]?.ToString() ?? ""; // Geeft bijv. \\.\PHYSICALDRIVE2
+                    string caption = t["Caption"]?.ToString() ?? "Onbekende USB-schijf";
+                    string deviceId = t["DeviceID"]?.ToString() ?? "";
+                    long sizeBytes = Convert.ToInt64(t["Size"] ?? 0);
+                    double sizeGB = Math.Round(sizeBytes / (1024.0 * 1024.0 * 1024.0), 1);
 
-                    // Extraheer alleen het nummer aan het einde
                     string driveNumber = deviceId.Substring(deviceId.LastIndexOf("DRIVE") + 5);
 
                     driveList.Add(new DriveInfoItem
                     {
-                        Caption = $"{caption} (Drive #{driveNumber})",
+                        Caption = $"[USB #{driveNumber}] {caption} ({sizeGB} GB)",
                         Number = driveNumber
                     });
                 }
+
                 cmbDrives.ItemsSource = driveList;
-                if (driveList.Count > 0) cmbDrives.SelectedIndex = 0;
-                Log("Schijvenlijst vernieuwd.");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Fout bij ophalen schijven. Start je de app wel als Administrator?\n" + ex.Message);
-            }
-        }
-
-        // 2. Kernfunctie om scripts/commando's veilig naar pfsshell te sturen
-        private string ExecutePfsCommand(string driveNumber, string scriptContent)
-        {
-            if (!File.Exists(pfsShellPath))
-            {
-                return $"FOUT: pfsshell.exe is niet gevonden in de map:\n{pfsShellPath}\nPlaats pfsshell.exe in dezelfde map als deze app.";
-            }
-
-            // PFS shell werkt het beste via een tijdelijk scriptbestand om 'hanging' te voorkomen
-            string scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pfs_script.txt");
-
-            // Bouw de commando-reeks op
-            string fullScript = $"device hdd{driveNumber}:\n" + scriptContent + "\nexit\n";
-            File.WriteAllText(scriptPath, fullScript);
-
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = pfsShellPath,
-                Arguments = scriptPath, // Geef het scriptbestand mee als argument
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                Verb = "runas" // Forceer admin rechten binnen het proces
-            };
-
-            using (Process process = Process.Start(startInfo))
-            {
-                // Wacht maximaal 5 seconden (5000 ms) in plaats van oneindig
-                if (process.WaitForExit(5000))
+                if (driveList.Count > 0)
                 {
-                    string output = process.StandardOutput.ReadToEnd();
-                    string error = process.StandardError.ReadToEnd();
-
-                    // Ruim het tijdelijke bestand op
-                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
-
-                    if (!string.IsNullOrEmpty(error)) return $"Foutmelding:\n{error}\n\nOutput:\n{output}";
-                    return output;
+                    cmbDrives.SelectedIndex = 0;
+                    Log($"✔ {driveList.Count} USB-schijf/schijven gedetecteerd. Interne schijven zijn afgeschermd.");
+                    txtStatus.Text = "[READY] USB PS2 HDD gedetecteerd.";
                 }
                 else
                 {
-                    // PFS Shell hangt! Sluit het proces geforceerd af
-                    process.Kill();
-                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
-                    return "FOUT: pfsshell.exe reageerde niet binnen 5 seconden en is geforceerd afgesloten.\n" +
-                           "Controleer of je Visual Studio als ADMINISTRATOR hebt opgestart en of het schijfnummer klopt!";
+                    Log("⚠ Geen USB-schijf gevonden. Koppel je PS2 schijf via een USB Hub/Dock aan en klik op 'SCAN USB'.");
+                    txtStatus.Text = "[WARNING] Geen USB-schijf gevonden.";
                 }
+            }
+            catch (Exception ex)
+            {
+                Log("✖ Fout bij ophalen schijven (Start als Administrator): " + ex.Message);
             }
         }
 
-        // Knoppen Events
-        private void BtnRefreshDrives_Click(object sender, RoutedEventArgs e) => LoadPhysicalDrives();
-
-        private void BtnListFiles_Click(object sender, RoutedEventArgs e)
+        private string GetTargetPartition()
         {
-            var selectedDrive = cmbDrives.SelectedItem as DriveInfoItem;
-            if (selectedDrive == null) { MessageBox.Show("Selecteer eerst een schijf."); return; }
+            string custom = txtCustomPartition.Text.Trim();
+            if (!string.IsNullOrEmpty(custom)) return custom;
 
-            string partition = txtPartition.Text.Trim();
-            if (string.IsNullOrEmpty(partition)) { MessageBox.Show("Vul een partitie in."); return; }
-
-            txtStatus.Text = $"Status: Bestanden ophalen van {partition}...";
-
-            // Commando's: mount de partitie en voer 'ls' uit
-            string script = $"mount {partition}\nls\nunmount";
-            string result = ExecutePfsCommand(selectedDrive.Number, script);
-
-            Log(result);
-            txtStatus.Text = "Status: Bestanden succesvol opgehaald.";
+            if (cmbPartition.SelectedItem is ComboBoxItem item && item.Content != null)
+            {
+                return item.Content.ToString() ?? "+OPL";
+            }
+            return "+OPL";
         }
 
-        private void BtnUploadFile_Click(object sender, RoutedEventArgs e)
+        // 2. Asynchrone pfsshell uitvoer zonder bevriezend scherm
+        private Task<string> ExecutePfsCommandAsync(string driveNumber, string scriptContent, int timeoutMs = 60000)
         {
-            var selectedDrive = cmbDrives.SelectedItem as DriveInfoItem;
-            if (selectedDrive == null) { MessageBox.Show("Selecteer eerst een schijf."); return; }
-
-            string partition = txtPartition.Text.Trim();
-            if (string.IsNullOrEmpty(partition)) { MessageBox.Show("Vul een partitie in."); return; }
-
-            // Open Windows Verkenner om een bestand te kiezen (bijv een .VCD of .ico)
-            OpenFileDialog openFileDialog = new OpenFileDialog();
-            if (openFileDialog.ShowDialog() == true)
+            return Task.Run(() =>
             {
-                string geselecteerdBestand = openFileDialog.FileName;
-                string bestandsNaam = Path.GetFileName(geselecteerdBestand);
+                if (!File.Exists(pfsShellPath))
+                {
+                    return $"FOUT: pfsshell.exe is niet gevonden in:\n{pfsShellPath}\nPlaats pfsshell.exe in de programmamap.";
+                }
 
-                // PFS shell vereist vaak dat het bestand lokaal in zijn eigen werkmap staat om 'put' te gebruiken
-                string doelPadInAppMap = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, bestandsNaam);
+                string scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"pfs_script_{Guid.NewGuid():N}.txt");
+                string fullScript = $"device hdd{driveNumber}:\n{scriptContent}\nexit\n";
+                File.WriteAllText(scriptPath, fullScript);
 
                 try
                 {
-                    txtStatus.Text = $"Status: Bestand kopiëren naar werkmap...";
-                    File.Copy(geselecteerdBestand, doelPadInAppMap, true);
+                    ProcessStartInfo startInfo = new ProcessStartInfo
+                    {
+                        FileName = pfsShellPath,
+                        Arguments = $"\"{scriptPath}\"",
+                        WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
 
-                    txtStatus.Text = $"Status: {bestandsNaam} aan het uploaden naar {partition} via PFS shell...";
+                    using Process? process = Process.Start(startInfo);
+                    if (process == null) return "FOUT: Kon pfsshell.exe niet starten.";
 
-                    // Commando's: mount, ga naar de root, zet bestand over, unmount
-                    string script = $"mount {partition}\nput {bestandsNaam}\nunmount";
-                    string result = ExecutePfsCommand(selectedDrive.Number, script);
-
-                    Log(result);
-
-                    // Verwijder het bestand uit de tijdelijke app-map na upload
-                    if (File.Exists(doelPadInAppMap)) File.Delete(doelPadInAppMap);
-
-                    txtStatus.Text = "Status: Upload voltooid!";
+                    if (process.WaitForExit(timeoutMs))
+                    {
+                        string output = process.StandardOutput.ReadToEnd();
+                        string error = process.StandardError.ReadToEnd();
+                        if (!string.IsNullOrEmpty(error)) return $"Melding:\n{error}\n\nOutput:\n{output}";
+                        return output;
+                    }
+                    else
+                    {
+                        process.Kill();
+                        return $"FOUT: Time-out na {timeoutMs / 1000} seconden. Controleer of je de app als Administrator draait.";
+                    }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Fout tijdens uploaden: " + ex.Message);
-                    txtStatus.Text = "Status: Upload mislukt.";
+                    return $"Systeemfout: {ex.Message}";
+                }
+                finally
+                {
+                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
+                }
+            });
+        }
+
+        private void SetBusyState(bool isBusy, string statusMessage)
+        {
+            BtnListPartitions.IsEnabled = !isBusy;
+            BtnListFiles.IsEnabled = !isBusy;
+            BtnUploadFile.IsEnabled = !isBusy;
+            BtnDownloadFile.IsEnabled = !isBusy;
+            cmbDrives.IsEnabled = !isBusy;
+
+            txtStatus.Text = statusMessage;
+            prgProgress.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void BtnRefreshDrives_Click(object sender, RoutedEventArgs e) => LoadPhysicalDrives();
+
+        // Scan alle aanwezige APA-partities op de PS2 schijf
+        private async void BtnListPartitions_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbDrives.SelectedItem is not DriveInfoItem selectedDrive)
+            {
+                MessageBox.Show("Selecteer eerst een USB PS2 HDD.", "Geen schijf", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            SetBusyState(true, "[BUSY] APA-partitietabel uitlezen...");
+            string result = await ExecutePfsCommandAsync(selectedDrive.Number, "ls");
+            Log($"=== PARTITIES OP USB #{selectedDrive.Number} ===\n{result}");
+            SetBusyState(false, "[OK] Partitielijst opgehaald.");
+        }
+
+        // Toon bestanden binnen een specifieke partitie
+        private async void BtnListFiles_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbDrives.SelectedItem is not DriveInfoItem selectedDrive)
+            {
+                MessageBox.Show("Selecteer eerst een USB PS2 HDD.", "Geen schijf", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string partition = GetTargetPartition();
+            SetBusyState(true, $"[BUSY] Bestanden ophalen uit '{partition}'...");
+
+            string script = $"mount {partition}\nls\nunmount";
+            string result = await ExecutePfsCommandAsync(selectedDrive.Number, script);
+
+            Log($"=== BESTANDEN IN {partition} ===\n{result}");
+            SetBusyState(false, $"[OK] Inhoud van '{partition}' opgehaald.");
+        }
+
+        // Upload een bestand (bijv. .VCD PS1 game, .ELF, .ICO of config) naar de partitie
+        private async void BtnUploadFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbDrives.SelectedItem is not DriveInfoItem selectedDrive)
+            {
+                MessageBox.Show("Selecteer eerst een USB PS2 HDD.", "Geen schijf", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string partition = GetTargetPartition();
+            OpenFileDialog openFileDialog = new OpenFileDialog
+            {
+                Title = $"Kies een bestand om te uploaden naar {partition}"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                string sourceFile = openFileDialog.FileName;
+                string fileName = Path.GetFileName(sourceFile);
+                string tempTarget = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+
+                SetBusyState(true, $"[BUSY] '{fileName}' voorbereiden en uploaden naar '{partition}'...");
+
+                try
+                {
+                    await Task.Run(() => File.Copy(sourceFile, tempTarget, true));
+
+                    // Timeout van 5 minuten (300.000 ms) zodat ook grote 700MB .VCD PS1-games rustig overgezet worden
+                    string script = $"mount {partition}\nput \"{fileName}\"\nunmount";
+                    string result = await ExecutePfsCommandAsync(selectedDrive.Number, script, 300000);
+
+                    Log($"=== UPLOAD NAAR {partition}: {fileName} ===\n{result}");
+                    SetBusyState(false, $"[OK] '{fileName}' succesvol geüpload naar '{partition}'!");
+                }
+                catch (Exception ex)
+                {
+                    Log($"✖ Upload fout: {ex.Message}");
+                    SetBusyState(false, "[ERROR] Upload mislukt.");
+                }
+                finally
+                {
+                    if (File.Exists(tempTarget)) File.Delete(tempTarget);
                 }
             }
         }
 
+        // Download / Exporteer een bestand vanaf de PS2 partitie naar je PC
+        private async void BtnDownloadFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (cmbDrives.SelectedItem is not DriveInfoItem selectedDrive)
+            {
+                MessageBox.Show("Selecteer eerst een USB PS2 HDD.", "Geen schijf", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            string partition = GetTargetPartition();
+            string remoteFileName = Microsoft.VisualBasic.Interaction.InputBox($"Welk bestand uit partitie '{partition}' wil je kopiëren naar je PC?\n(Tip: Klik eerst op 'LIST FILES' om de exacte bestandsnaam te zien)","Bestand exporteren van PS2 HDD", "");
+            if (string.IsNullOrWhiteSpace(remoteFileName)) return;
+            SaveFileDialog saveDialog = new SaveFileDialog
+            {
+                FileName = remoteFileName,
+                Title = "Opslaan op PC"
+            };
+            if (saveDialog.ShowDialog() == true)
+            {
+                SetBusyState(true, $"[BUSY] '{remoteFileName}' downloaden van '{partition}'...");
+                string tempDownloaded = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, remoteFileName);
+                try
+                {
+                    string script = $"mount {partition}\nget \"{remoteFileName}\"\nunmount";
+                    string result = await ExecutePfsCommandAsync(selectedDrive.Number, script, 300000);
+                    if (File.Exists(tempDownloaded))
+                    {
+                        File.Copy(tempDownloaded, saveDialog.FileName, true);
+                        File.Delete(tempDownloaded);
+                        Log($"=== EXPORT VAN {partition}: {remoteFileName} ===\nOpgeslagen op: {saveDialog.FileName}\n{result}");
+                        SetBusyState(false, $"[OK] '{remoteFileName}' opgeslagen op je PC!");
+                    }
+                    else
+                    {
+                        Log($"✖ Kon bestand '{remoteFileName}' niet vinden in {partition}.\n{result}");
+                        SetBusyState(false, "[ERROR] Bestand niet gevonden op PS2 HDD.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"✖ Export fout: {ex.Message}");
+                    SetBusyState(false, "[ERROR] Export mislukt.");
+                }
+            }
+        }
+        private void BtnClearLog_Click(object sender, RoutedEventArgs e) => txtLog.Clear();
+        private void BtnMinimize_Click(object sender, RoutedEventArgs e) => this.WindowState = WindowState.Minimized;
+        private void BtnExit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
+        private void Header_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Left) this.DragMove();
+        }
         private void Log(string message)
         {
-            txtLog.AppendText($"[{DateTime.Now.ToLongTimeString()}] \n{message}\n\n");
-            txtLog.ScrollToEnd();
+            Dispatcher.Invoke(() =>
+            {
+                txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\n\n");
+                txtLog.ScrollToEnd();
+            });
         }
     }
-
-    // Helper klasse voor de ComboBox
     public class DriveInfoItem
     {
-        public string Caption { get; set; }
-        public string Number { get; set; }
+        public string Caption { get; set; } = string.Empty;
+        public string Number { get; set; } = string.Empty;
     }
 }
