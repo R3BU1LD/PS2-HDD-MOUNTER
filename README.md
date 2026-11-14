@@ -16,7 +16,7 @@ A modern, sci-fi themed C# WPF utility for managing partitions and transferring 
 
 ---
 
-## Key Features
+<img width="378" height="76" alt="Key Features" src="https://github.com/user-attachments/assets/ea91053e-aa79-4fd6-af7a-8658d76ccf45" />
 
 * **Strict USB-Only Hardware Lock:** Queries Windows WMI exclusively for USB-connected storage (`InterfaceType='USB'`). Internal SATA and NVMe PC drives are completely hidden to prevent accidental data loss.
 * **APA Partition Scanner (`SCAN PARTITIONS`):** Reads and displays the full PS2 APA partition table (`__mbr`, `__sysconf`, `+OPL`, `__.POPS`, etc.) with exact megabyte allocations.
@@ -30,7 +30,7 @@ A modern, sci-fi themed C# WPF utility for managing partitions and transferring 
 
 ---
 
-## Project Structure
+<img width="512" height="76" alt="Project Structure2" src="https://github.com/user-attachments/assets/a8f738a7-617e-4d36-8a29-8a594acac9dd" />
 
 ```text
 PS2HDDMOUNTER/
@@ -42,7 +42,7 @@ PS2HDDMOUNTER/
 
 ---
 
-## Prerequisites & Setup
+<img width="600" height="81" alt="Prerequisites and Setup" src="https://github.com/user-attachments/assets/340f7c41-3534-4305-a6f2-7953b173476b" />
 
 1. **Operating System:** Windows 10 or Windows 11 (64-bit).
 2. **Runtime:** [.NET 8.0 Desktop Runtime](https://microsoft.com).
@@ -51,6 +51,6 @@ PS2HDDMOUNTER/
 
 ---
 
-## License
+<img width="231" height="76" alt="License" src="https://github.com/user-attachments/assets/ee2ce6ca-ad97-41ef-bd1a-9b9baf5f79b0" />
 
 Released under the **GNU General Public License v3.0 (GPL-3.0)** — powered by `pfsshell`.
