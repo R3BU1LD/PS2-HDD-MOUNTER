@@ -78,15 +78,26 @@ namespace PS2HDDMOUNTER
 
             using (Process process = Process.Start(startInfo))
             {
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
+                // Wacht maximaal 5 seconden (5000 ms) in plaats van oneindig
+                if (process.WaitForExit(5000))
+                {
+                    string output = process.StandardOutput.ReadToEnd();
+                    string error = process.StandardError.ReadToEnd();
 
-                // Ruim het tijdelijke bestand op
-                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+                    // Ruim het tijdelijke bestand op
+                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
 
-                if (!string.IsNullOrEmpty(error)) return $"Foutmelding:\n{error}\n\nOutput:\n{output}";
-                return output;
+                    if (!string.IsNullOrEmpty(error)) return $"Foutmelding:\n{error}\n\nOutput:\n{output}";
+                    return output;
+                }
+                else
+                {
+                    // PFS Shell hangt! Sluit het proces geforceerd af
+                    process.Kill();
+                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
+                    return "FOUT: pfsshell.exe reageerde niet binnen 5 seconden en is geforceerd afgesloten.\n" +
+                           "Controleer of je Visual Studio als ADMINISTRATOR hebt opgestart en of het schijfnummer klopt!";
+                }
             }
         }
 

@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:PS2HDDMOUNTER"
         mc:Ignorable="d"
-       Title="PS2 HDD MOUNTER" Height="450" Width="600" Background="#F0F0F0">
+       Title="PS2 HDD MOUNTER" Height="450" Width="600" Background="#F0F0F0" WindowStyle="None" ResizeMode="CanResizeWithGrip">
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
